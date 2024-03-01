@@ -1,0 +1,152 @@
+---
+title: "NYC_INCIDENTS_REPORT"
+author: "STUDENT"
+date: "2024-03-01"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### NYC Incident Report
+
+This report is the data analysis of every shooting incident that occurred in New York City, NEW York, USA in 2006 through the end of the previous calendar year. Each record represents an incident of a crime in NYC and includes information about the Incident number, the location and time of occurrence. It also includes if this is a statistical murder flag. Information on the perpetrator and victim are included such as age, gender, and race.This data is public and can be found with the following link: https://catalog.data.gov/dataset?q=NYPD+Shooting+Incident+Data+%28Historic%29&sort=views_recent+desc&ext_location=&ext_bbox=&ext_prev_extent=
+
+
+
+## STEP 1: Import Important Libraries
+```{r library, message=FALSE, warning=FALSE}
+# install.packages("tidyverse")
+library(tidyverse)
+library(dplyr)
+library(tinytex)
+library(modelr)
+```
+
+## Step 2: Load Data
+
+* `read_csv()` reads comma delimited files
+
+```{r load}
+nyc = read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+head(nyc)
+view(nyc)
+nyc_2= read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+```
+
+
+
+## Step 3: Tidy and Transform Data
+
+I first eliminated the columns I do wish to use for this analysis, which are: **PRECINCT**,**JURISDICTION_CODE**,**LOCATION_DESC**, **X_COORD_CD**, **Y_COORD_CD**, and **Lon_Lat**. 
+
+```{r}
+nyc =nyc %>% select(INCIDENT_KEY, OCCUR_DATE, OCCUR_TIME, BORO, STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP,VIC_SEX, VIC_RACE,Latitude, Longitude) 
+
+
+# After this, I need to see what is missing
+lapply(nyc,function(x) sum(is.na(x)))
+```
+
+It is essential to know why some of the data is missing. It seems at the time of the data collection, some information was no reported or it was not known as the victim may have been unsure if the perpetrator was a male or female, their age, or their race. Also, if the data set was a collection of solved cases, it is likely the missing data points are due to the investigation not being done yet. Therefore, out of respect of the investigation and those involved, missing points will be parked as "unknowns"
+
+Key data type conversion are:
+
+* **INCIDENT_KEY** should be treated as a string.
+* **BORO** should be treated as a factor.
+* **PERP_AGE_GROUP** should be treated as a factor.
+* **PERP_SEX** should be treated as a factor.
+* **PERP_RACE** should be treated as a factor.
+* **VIC_AGE_GROUP** should be treated as a factor.
+* **VIC_SEX** should be treated as a factor.
+* **VIC_RACE** should be treated as a factor
+```{r}
+# Tidy and transform data
+nyc_2 = nyc_2 %>% replace_na(list(PERP_AGE_GROUP = "Unknown", PERP_SEX = "Unknown", PERP_RACE= "Unknown"))
+
+#Clean up data
+nyc_2$PERP_AGE_GROUP = recode(nyc_2$PERP_AGE_GROUP, UNKNOWN="Unknown")
+nyc_2$PERP_SEX=recode(nyc_2$PERP_SEX, U= "Unknown")
+nyc_2$PERP_RACE=recode(nyc_2$PERP_RACE, UNKNOWN="Unknown")
+nyc_2$VIC_SEX=recode(nyc_2$VIC_SEX, U="Unknown")
+nyc_2$VIC_RACE=recode(nyc_2$VIC_RACE, UNKNOWN="Unknown")
+nyc_2$INCIDENT_KEY= as.character(nyc_2$INCIDENT_KEY)
+nyc_2$BORO=as.factor(nyc_2$BORO)
+nyc_2$PERP_AGE_GROUP=as.factor(nyc_2$PERP_AGE_GROUP)
+nyc_2$PERP_SEX= as.factor(nyc_2$PERP_SEX)
+nyc_2$PERP_RACE=as.factor(nyc_2$PERP_RACE)
+nyc_2$VIC_AGE_GROUP=as.factor(nyc_2$VIC_AGE_GROUP)
+nyc_2$VIC_SEX=as.factor(nyc_2$VIC_SEX)
+nyc_2$VIC_RACE= as.factor(nyc_2$VIC_RACE)
+
+#Symmary of changes
+ summary(nyc_2)
+ 
+# The below tidying occurred during visual analysis 
+ 
+# Remove extreme values in data
+nyc_2 = nyc_2[!(nyc_2$PERP_AGE_GROUP=="1020" | nyc_2$PERP_AGE_GROUP=="224" | nyc_2$PERP_AGE_GROUP=="940"),]
+
+
+```
+
+
+## Step 4:  Visualizations and Analysis
+
+
+1. Which park of New York is the most dangerous? 
+
+Based on the  bar graph, Brooklyn is the most dangerous borough, followed by the Bronx, Queens, Manhattan, and Staten Island. Upon this analysis, I thought about if Brooklyn was really the most dangerous neighborhood. Therefore, outside analysis will be done by taking data on the size and populations of these boroughs and doing an analysis on number of incidents based on square mile and based on number of people. Based on data completed outside of R that will be part of the attachments, it was found that the Bronx may be the most dangerous borough based on the number of incidents per square mile and by person. Future analysis will need to be taken in this area. 
+
+```{r}
+g <- ggplot(nyc_2, aes(x=BORO))+ geom_bar()+ labs(title ="Number of Incidents in Different Boroughs of NYC", x="Boroughs of NYC", y="Number of Incidents")+theme_classic()
+
+g
+```
+
+```{r}
+table(nyc_2$BORO,nyc_2$STATISTICAL_MURDER_FLAG)
+
+```
+
+
+2. Is there a correlation between perpetrator and victim?
+
+I am curious if there was any correlation between location and victim number based on the victim demographics. I therefore analyzed the Borough location based on the victim's race, gender, and age. There are some interesting correlations between these boroughs and victim profiles. 
+
+```{r}
+#Boroughs vs Victim Sex
+ g <- ggplot(nyc_2, aes(x=BORO, fill=VIC_SEX))+ geom_bar()+ labs(title ="Number of Victims in Different Boroughs of NYC", x="Boroughs of NYC", y="Number of Victims")+theme_classic()
+g
+```
+
+```{r}
+#Boroughs vs Victim Age
+g <- ggplot(nyc_2, aes(x=BORO, fill=VIC_AGE_GROUP))+ geom_bar()+ labs(title ="Number of Victims in Different Boroughs of NYC", x="Boroughs of NYC", y="Number of Victims")+theme_classic()
+g
+```
+
+```{r}
+#Boroughs vs Victim RACE
+g <- ggplot(nyc_2, aes(x=BORO, fill=VIC_RACE))+ geom_bar()+ labs(title ="Number of Victims in Different Boroughs of NYC", x="Boroughs of NYC", y="Number of Victims")+theme_classic()
+g
+```
+
+```{r message=FALSE, warning=FALSE}
+
+nyc_2$OCCUR_HOUR=hour(hms(as.character(nyc_2$OCCUR_TIME)))
+nyc_4 = nyc_2 %>%
+  group_by(OCCUR_HOUR) %>%
+  count()
+ g <-ggplot(nyc_4, aes(x=OCCUR_HOUR,y=n))+geom_col()+labs(title = "Which time of the day is the safest to see NYC", x ="Past CRIME HOUR OCCURANCE", y = "Frequency")+theme_classic()
+g
+
+```
+## Step 5: Identify Bias
+
+Bias that occurred during this process was in selecting the topics to investigate. I became interested in investigating victim profiles because as a mother and an avid traveler, I want to make sure when I visit NYC, I keep safety as my top priority. It is important to keep bias out of data analysis as to not influence the data. It is important to also communicate these points during a presentation so this can be considered in data analysis. Also, I avoided using the perpetrator data due to bias. With all the cop crime stories in the news and the crimes and data showing racism and bias taught in the police academy, I avoided analyzing this data. Since there is a chance some of these crimes could have the perpetrators be falsely accused or committed, its important to further investigate the outcomes of the crimes in future data analysis. 
+
